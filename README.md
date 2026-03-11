@@ -36,6 +36,7 @@ RTRP-PROJECT/
 ├── README.md               # This documentation
 
 ├── data/
+
 │   ├── train_videos/       # Place training videos here
 
 │   ├── test_videos/        # Place test videos here
@@ -46,11 +47,11 @@ RTRP-PROJECT/
 │       └── test/           # Extracted frames (auto-created)
 
 ├── saved_models/
+
 │   └── conv_autoencoder.pth  # Trained autoencoder weights (after training)
 
 └── outputs/
     ├── plots/              # Training curves, CSV with reconstruction errors
-    
     └── videos/             # Output videos with drawn anomalies
 All folders under data/, saved_models/, and outputs/ are created automatically when you run the code.
 
