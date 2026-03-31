@@ -1,249 +1,384 @@
-# RTRP-PROJECT
-**Smart Surveillance System with Anomaly Detection (PyTorch)**
-This project is a beginner-friendly but realistic smart surveillance system built in Python using PyTorch.
-It takes a video file, webcam feed, or CCTV/RTSP stream as input and performs real-time anomaly detection.
+# Smart Surveillance — Full-Stack AI Dashboard
 
-The system combines:
+A complete full-stack implementation connecting the Python CNN+BiLSTM anomaly detection backend with a React dashboard. Real-time detection status is pushed via WebSocket.
 
-Deep Learning
-Convolutional Autoencoder (frame reconstruction–based anomaly detection)
-CNN + LSTM (sequence modeling; ready for future extension)
-YOLO (via ultralytics) for person/object detection and region-of-interest highlighting
-Machine Learning
-Isolation Forest on reconstruction errors for optional anomaly scoring
-Anomalous activities such as unusual movements, intrusions, fights, loitering, or abandoned objects tend to produce higher anomaly scores and will be visually highlighted.
+---
 
-**1. Folder Structure**
-RTRP-PROJECT/
-├── main.py                 # Single entry point (CLI) for preprocess/train/predict
+## Architecture
 
-├── config.py               # All paths, hyperparameters, thresholds
+```
+┌──────────────────────────────────────────────────────────┐
+│  React Frontend  (Vite · Zustand · Recharts)             │
+│  localhost:3000                                           │
+│                                                           │
+│  Login → Dashboard → Detection → Live → Logs → Analytics │
+└────────────────────┬─────────────────────────────────────┘
+                     │ REST  +  WebSocket
+┌────────────────────▼─────────────────────────────────────┐
+│  FastAPI Backend  (uvicorn)                               │
+│  localhost:8000                                           │
+│                                                           │
+│  /api/upload        /api/detection/start|stop|status      │
+│  /api/logs          /api/outputs/*                        │
+│  /ws/detection      (WebSocket push)                      │
+└────────────────────┬─────────────────────────────────────┘
+                     │ Python imports
+┌────────────────────▼─────────────────────────────────────┐
+│  Existing Python Modules                                  │
+│                                                           │
+│  predict.py · model.py · alert.py · feature_extraction.py│
+│  data_preprocessing.py · config.py · utils.py            │
+└──────────────────────────────────────────────────────────┘
+```
 
-├── preprocess.py           # Frame extraction + PyTorch datasets/dataloaders
+---
 
-├── model.py                # Conv Autoencoder + CNN+LSTM models
+## Folder Structure
 
-├── train.py                # Training loop (autoencoder + Isolation Forest)
+```
+project/
+├── backend/
+│   ├── api/
+│   │   └── server.py          ← FastAPI application
+│   ├── predict_adapter.py     ← Bridges API ↔ existing predict.py
+│   ├── config.py              ← (existing)
+│   ├── model.py               ← (existing)
+│   ├── predict.py             ← (existing)
+│   ├── alert.py               ← (existing)
+│   ├── feature_extraction.py  ← (existing)
+│   ├── data_preprocessing.py  ← (existing)
+│   ├── utils.py               ← (existing)
+│   ├── dataset/
+│   │   ├── normal/
+│   │   └── anomaly/
+│   ├── models/                ← .pth model weights
+│   ├── outputs/               ← annotated output videos (served as static)
+│   ├── snapshots/             ← anomaly screenshots
+│   ├── anomaly_clips/         ← trimmed anomaly clips
+│   ├── uploads/               ← uploaded video files
+│   ├── logs/                  ← anomaly_log.csv, system.log
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Login.jsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── Detection.jsx
+│   │   │   ├── Live.jsx
+│   │   │   ├── Analytics.jsx
+│   │   │   ├── Logs.jsx
+│   │   │   └── OtherPages.jsx  (Snapshots, Clips, Alerts)
+│   │   ├── components/
+│   │   │   └── dashboard/
+│   │   │       └── Sidebar.jsx
+│   │   ├── services/
+│   │   │   └── api.js          ← All HTTP + WS calls
+│   │   ├── store/
+│   │   │   └── useStore.js     ← Zustand global state
+│   │   ├── styles/
+│   │   │   └── globals.css
+│   │   ├── App.jsx
+│   │   └── main.jsx
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   └── postcss.config.js
+│
+└── README.md
+```
 
-├── predict.py              # Real-time / offline inference + video output
+---
 
-├── utils.py                # Helper utilities (YOLO loader, drawing, seeding)
+## Installation
 
-├── alert.py                # Alert / alarm triggering logic
+### Backend
 
-├── requirements.txt        # Python dependencies
+```bash
+cd backend
 
-├── README.md               # This documentation
-
-├── data/
-
-│   ├── train_videos/       # Place training videos here
-
-│   ├── test_videos/        # Place test videos here
-
-│   └── frames/
-│       ├── train/          # Extracted frames (auto-created)
-
-│       └── test/           # Extracted frames (auto-created)
-
-├── saved_models/
-
-│   └── conv_autoencoder.pth  # Trained autoencoder weights (after training)
-
-└── outputs/
-    ├── plots/              # Training curves, CSV with reconstruction errors
-    └── videos/             # Output videos with drawn anomalies
-All folders under data/, saved_models/, and outputs/ are created automatically when you run the code.
-
-**2. Installation**
-From the root of the project (RTRP-PROJECT):
-
+# Create virtual environment
 python -m venv venv
-venv\Scripts\activate      # On Windows PowerShell
-pip install --upgrade pip
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # Mac/Linux
+
+# Install PyTorch (CPU)
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Install FastAPI and all dependencies
 pip install -r requirements.txt
-If you do not want to use YOLO, you can skip ultralytics by removing it from requirements.txt and setting USE_YOLO = False in config.py.
 
-**3. Sample Datasets for Video Anomaly Detection**
-You can use any of the following public datasets (download manually and place video files in data/train_videos and data/test_videos):
-
-UCSD Anomaly Detection Dataset
-Pedestrian walkways with anomalies such as bicycles, skateboards, etc.
-Avenue Dataset
-Surveillance videos with various unusual events.
-Large-scale anomaly detection benchmark for surveillance.
-Start by:
-
-Putting normal videos in data/train_videos/
-Putting mixture of normal + anomalous videos in data/test_videos/
-The autoencoder is trained on the normal training set; anomalies are detected later using high reconstruction error.
-
-**4. Explanation of Algorithms and Why They Are Used**
-Convolutional Autoencoder (Deep Learning)
-
-Learns to reconstruct normal frames only.
-At inference time, frames with unusual patterns (fights, intrusions, abnormal motion) will have a higher reconstruction error, acting as an anomaly score.
-CNN + LSTM (Deep Learning)
-
-CNN extracts spatial features from each frame.
-LSTM models temporal dynamics across a sequence of frames.
-This is ideal for activities that are anomalous due to how they evolve over time (e.g., sudden running, crowd panic, fights).
-In this starter project, the class definition and data pipeline are ready (model.py, SequenceDataset in preprocess.py), so you can plug it into a future training script.
-YOLO (Deep Learning Object Detection)
-
-Detects persons and objects in each frame.
-Gives bounding boxes used to localize regions where anomalies may occur.
-Combined with anomaly score, you can highlight suspicious persons/regions.
-Isolation Forest / One-Class ML (Machine Learning)
-
-Trained on reconstruction errors from autoencoder.
-Learns a model of what error range is normal, flagging outliers as anomalies.
-Useful as a classical ML layer on top of deep features, making the system more robust.
-
-**5. Module-by-Module Explanation**
-**config.py**
-
-Central place for paths, hyperparameters, and thresholds.
-Examples:
-FRAME_SIZE, SEQUENCE_LENGTH, FRAMES_PER_SECOND
-Training: BATCH_SIZE, NUM_EPOCHS, LEARNING_RATE
-Anomaly thresholds: AUTOENCODER_ANOMALY_THRESHOLD
-Video input: DEFAULT_VIDEO_SOURCE, YOLO usage flag.
-
-**preprocess.py**
-
-Extracts frames from videos and stores them as PNG images.
-Provides:
-extract_frames_from_video and extract_frames_for_directory
-FrameDataset for autoencoder training (single-frame level)
-SequenceDataset for sequence models (CNN+LSTM, ConvLSTM)
-create_dataloaders which returns DataLoader objects for training/testing.
-
-**model.py**
-
-ConvAutoencoder: convolutional encoder–decoder architecture.
-Used for unsupervised anomaly detection via reconstruction error.
-CNNLSTMAnomalyDetector: CNN backbone + LSTM sequence model.
-Learns to model activities over time and output an anomaly score.
-Helper functions build_autoencoder and build_cnn_lstm.
-
-**train.py**
-
-Loads FrameDataset from preprocess.py.
-Trains ConvAutoencoder using MSE reconstruction loss.
-Saves:
-Trained model weights to saved_models/conv_autoencoder.pth
-Training loss curve (outputs/plots/autoencoder_loss.png)
-CSV file of reconstruction errors and Isolation Forest predictions.
-Fits an Isolation Forest on reconstruction errors (optional ML anomaly scorer).
-
-**predict.py**
-Handles real-time and offline inference.
-Opens:
-Webcam (0)
-Video file path
-CCTV/RTSP URL
-Per frame:
-Computes anomaly score using trained autoencoder.
-Runs YOLO to detect and draw bounding boxes around persons/objects.
-Overlays anomaly score and status on the frame.
-Triggers an alert (via alert.py) if anomaly score exceeds threshold.
-Saves annotated output video to outputs/videos/.
-
-**utils.py**
-
-setup_logging, seed_everything, ensure_dir.
-load_yolo_detector and run_yolo_detection (using ultralytics.YOLO).
-draw_bounding_boxes to overlay bounding boxes and anomaly text on frames.
-
-**alert.py**
-
-trigger_alert currently:
-Prints a message to the terminal.
-Tries a tiny beep placeholder.
-Easy to extend with email/SMS/REST API/cloud functions.
-
-**main.py**
-
-Simple CLI wrapper with subcommands:
-preprocess
-train
-predict
-
-**6. Step-by-Step Execution (VS Code or Terminal)**
-From the project root (RTRP-PROJECT), after installing dependencies:
-
-Prepare data
-
-Put your normal training videos into:
-data/train_videos/
-Put your test videos (normal + anomalous) into:
-data/test_videos/
-Extract frames (preprocessing)
-
-python main.py preprocess
-This fills:
-
-data/frames/train/VIDEO_NAME/frame_000000.png, ...
-data/frames/test/VIDEO_NAME/frame_000000.png, ...
-Train the autoencoder + Isolation Forest
+# (Optional) Train models first
 python main.py train
-This will:
+```
 
-Train the conv autoencoder on normal frames.
-Save weights to saved_models/conv_autoencoder.pth.
-Save loss curve and reconstruction error stats in outputs/plots/.
-Run real-time or offline inference
-Webcam
+### Frontend
 
-python main.py predict
-Video file
+```bash
+cd frontend
 
-python main.py predict --source data/test_videos/your_video.mp4
-CCTV/RTSP stream
+# Install Node.js 18+ from nodejs.org first, then:
+npm install
+```
 
-python main.py predict --source "rtsp://user:pass@ip:port/your_stream"
-During inference you will see:
+---
 
-Bounding boxes around detected objects (using YOLO, if enabled).
-Anomaly score displayed at the top.
-[ANOMALY] tag when score exceeds threshold.
-Terminal alert messages when anomaly is triggered.
-A saved annotated video in outputs/videos/.
-Press q in the video window to stop.
-**7. How to Extend the Project**
-This codebase is structured to be easy to extend:
+## Running the Project
 
-Add face recognition
+### Terminal 1 — Backend
 
-Use a face detector/recognizer (e.g., face_recognition library or a deep model).
-Integrate into predict.py, running after YOLO or in parallel.
-Overlay recognized identities and treat unknown faces in restricted areas as anomalies.
-Weapon detection
+```bash
+cd backend
+source venv/bin/activate
+uvicorn api.server:app --host 0.0.0.0 --port 8000 --reload
+```
 
-Fine-tune YOLO on weapon classes (gun, knife, etc.) or use an off-the-shelf weapon detector.
-If a weapon is detected, force a high anomaly score and trigger critical alerts.
-Crowd monitoring
+You should see:
+```
+INFO: Uvicorn running on http://0.0.0.0:8000
+INFO: Models loaded successfully
+```
 
-Count people using YOLO detections.
-Track crowd density and motion, raising anomalies when counts or motion patterns exceed safe thresholds.
-Cloud deployment
+### Terminal 2 — Frontend
 
-Wrap predict.py logic in a REST API (Flask/FastAPI).
-Stream video to/from a server or edge device.
-Connect alert.py to cloud notifications (e.g., AWS SNS, Twilio).
-Because the code is modular (config.py, preprocess.py, model.py, train.py, predict.py, alert.py, utils.py), you can safely plug in more advanced models (3D CNNs, ConvLSTMs, transformers) as your skills grow.
+```bash
+cd frontend
+npm run dev
+```
 
-**8. Notes and Tips**
-Real-time performance
+You should see:
+```
+VITE v5.x  ready in 800ms
+➜  Local:   http://localhost:3000/
+```
 
-Use a smaller input size (FRAME_SIZE) and a light YOLO model (yolov8n.pt).
-Run on GPU (CUDA) when available.
-Threshold tuning
+### Open Browser
 
-Start with AUTOENCODER_ANOMALY_THRESHOLD from config.py.
-Inspect the reconstruction_errors.csv and autoencoder_loss.png to tune this threshold.
-Safety
+Navigate to `http://localhost:3000`
 
-This project is an educational baseline, not a production-grade security system.
-Always validate and harden models before real-world deployment.
+Login with: `admin / admin123`
+
+---
+
+## API Reference
+
+### Authentication
+
+```bash
+# Login
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+# Returns: {"token":"demo_token_admin_...","username":"admin"}
+```
+
+### Upload Video
+
+```bash
+curl -X POST http://localhost:8000/api/upload \
+  -F "file=@dataset/anomaly/robbery.mp4"
+# Returns: {"filename":"abc123_robbery.mp4","fps":25,"frames":1250,...}
+```
+
+### Start Detection
+
+```bash
+# On uploaded video
+curl -X POST http://localhost:8000/api/detection/start \
+  -H "Content-Type: application/json" \
+  -d '{"source":"abc123_robbery.mp4","source_type":"video","threshold":0.5}'
+
+# Webcam
+curl -X POST http://localhost:8000/api/detection/start \
+  -H "Content-Type: application/json" \
+  -d '{"source":"0","source_type":"webcam","threshold":0.5}'
+
+# RTSP camera
+curl -X POST http://localhost:8000/api/detection/start \
+  -H "Content-Type: application/json" \
+  -d '{"source":"rtsp://192.168.1.100:554/stream","source_type":"rtsp","threshold":0.5}'
+```
+
+### Stop Detection
+
+```bash
+curl -X POST http://localhost:8000/api/detection/stop
+```
+
+### Poll Status
+
+```bash
+curl http://localhost:8000/api/detection/status
+# Returns:
+# {
+#   "running": true,
+#   "frame_count": 312,
+#   "anomaly_count": 3,
+#   "confidence": 0.8320,
+#   "is_anomaly": true,
+#   "anomaly_type": "Theft",
+#   "fps": 24.1,
+#   "elapsed_sec": 12.5
+# }
+```
+
+### WebSocket (real-time updates)
+
+```javascript
+// JavaScript
+const ws = new WebSocket('ws://localhost:8000/ws/detection')
+ws.onmessage = (e) => {
+  const data = JSON.parse(e.data)
+  console.log(data.is_anomaly, data.confidence, data.anomaly_type)
+}
+```
+
+### Fetch Logs
+
+```bash
+curl "http://localhost:8000/api/logs?limit=50&skip=0"
+```
+
+### List Snapshots
+
+```bash
+curl http://localhost:8000/api/outputs/snapshots
+```
+
+### Analytics Summary
+
+```bash
+curl http://localhost:8000/api/stats/summary
+# Returns by_type counts, hourly distribution, avg_confidence
+```
+
+---
+
+## How Integration Works
+
+### 1. Frontend calls backend API
+
+```
+Detection.jsx
+  → detectionAPI.start(payload)
+  → POST /api/detection/start
+  → server.py spawns _detection_thread()
+  → thread calls run_inference_frame() from predict_adapter.py
+  → predict_adapter imports predict.py, model.py, feature_extraction.py
+```
+
+### 2. Real-time updates via WebSocket
+
+```
+_detection_thread (background thread)
+  → asyncio.run(_broadcast(update))   ← every frame
+  → WebSocket message to all clients
+  → ws.onmessage in React
+  → store.setStatus(data)             ← Zustand store update
+  → React re-renders status badge, confidence bar, charts
+```
+
+### 3. Alerts flow
+
+```
+predict_adapter detects anomaly
+  → alert.py trigger() is called
+  → CSV log entry written
+  → Sound + popup (if not in cooldown)
+  → WebSocket also broadcasts {is_anomaly: true, anomaly_type: "Theft"}
+  → Frontend toast notification appears
+  → Alert panel updates
+```
+
+### 4. Evidence files served
+
+```
+backend writes:
+  outputs/output_video_timestamp.mp4
+  snapshots/Theft_timestamp.jpg
+  anomaly_clips/clip_timestamp.mp4
+
+FastAPI serves them as static files:
+  GET /snapshots/Theft_timestamp.jpg
+  GET /clips/clip_timestamp.mp4
+
+Frontend fetches list and renders gallery:
+  GET /api/outputs/snapshots
+  → [{name, url, size_mb}, ...]
+  → <img src={file.url}/>
+```
+
+---
+
+## Environment Variables
+
+Create `backend/.env`:
+
+```env
+# Backend
+HOST=0.0.0.0
+PORT=8000
+CORS_ORIGIN=http://localhost:3000
+
+# Email alerts (optional)
+SEND_EMAIL=false
+EMAIL_FROM=your@gmail.com
+EMAIL_PASS=your_app_password
+EMAIL_TO=security@example.com
+```
+
+Create `frontend/.env`:
+
+```env
+VITE_API_URL=http://localhost:8000
+VITE_APP_TITLE=SurveillanceAI
+```
+
+---
+
+## Production Deployment
+
+```bash
+# Build frontend
+cd frontend && npm run build
+
+# Serve built frontend from FastAPI
+# In server.py, add after static mounts:
+app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="spa")
+
+# Run production server
+uvicorn api.server:app --host 0.0.0.0 --port 8000 --workers 2
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| AI/ML | PyTorch, ResNet-50, BiLSTM | Anomaly detection |
+| Object Detection | YOLOv8n | Person bounding boxes |
+| ML Layer | scikit-learn (IsoForest, OCSVM, RF) | Ensemble scoring |
+| Video | OpenCV, Farneback Optical Flow | Frame processing |
+| API | FastAPI + uvicorn | REST + WebSocket server |
+| Frontend | React 18 + Vite | Dashboard UI |
+| State | Zustand | Global detection state |
+| Charts | Recharts | Analytics visualisation |
+| Styling | CSS Variables + Tailwind | Dark surveillance theme |
+| Fonts | Syne + JetBrains Mono | UI typography |
+
+---
+
+## Dashboard Pages
+
+| Page | Route | What it shows |
+|------|-------|---------------|
+| Dashboard | `/dashboard` | KPI cards, confidence stream, type distribution, system health |
+| Detection | `/dashboard/detection` | Upload + webcam + RTSP tabs, threshold slider, live status |
+| Live/RTSP | `/dashboard/live` | Dedicated live stream view with CCTV-style frame |
+| Alerts | `/dashboard/alerts` | Active anomaly banner + session alert history |
+| Logs | `/dashboard/logs` | Searchable CSV log table with confidence colouring |
+| Snapshots | `/dashboard/snapshots` | Photo grid of saved anomaly frames |
+| Clips | `/dashboard/clips` | List of downloadable anomaly video clips |
+| Analytics | `/dashboard/analytics` | Deep charts: confidence timeline, radar, hourly bar, top types |
